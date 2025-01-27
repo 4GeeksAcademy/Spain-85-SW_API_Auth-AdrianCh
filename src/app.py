@@ -211,7 +211,7 @@ def create_favourite(id):
     except Exception as e:
         return jsonify({"msg": str(e)}), 500
 
-# Request body de la function (planet OR character)
+# Request body of the function (planet OR character)
 # {
 #   "type": "planet",
 #   "id": 1
