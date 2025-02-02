@@ -10,7 +10,7 @@ class User(db.Model):
 
     id = mapped_column(Integer, primary_key=True)
     email = mapped_column(String(120), nullable=False)
-    password = mapped_column(String(80))
+    password = mapped_column(String(320))
     favorites = relationship("Favorite", back_populates="user")
 
     def __repr__(self):

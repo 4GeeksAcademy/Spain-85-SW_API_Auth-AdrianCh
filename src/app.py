@@ -10,9 +10,14 @@ from utils import APIException, generate_sitemap
 from admin import setup_admin
 from models import db, User, Planet, Character, Favorite
 from sqlalchemy import select
+from flask_jwt_extended import create_access_token, JWTManager, get_jwt_identity, jwt_required
+from flask_bcrypt import Bcrypt
 
 app = Flask(__name__)
+bcrypt = Bcrypt(app)
 app.url_map.strict_slashes = False
+
+
 
 db_url = os.getenv("DATABASE_URL")
 if db_url is not None:
@@ -26,6 +31,10 @@ db.init_app(app)
 CORS(app)
 setup_admin(app)
 
+# Setup the Flask-JWT-Extended extension
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+jwt = JWTManager(app)
+
 # Handle/serialize errors like a JSON object
 @app.errorhandler(APIException)
 def handle_invalid_usage(error):
@@ -36,12 +45,33 @@ def handle_invalid_usage(error):
 def sitemap():
     return generate_sitemap(app)
 
+@app.route("/login", methods=["POST"])
+def login():
+    try:
+        email = request.json.get("email", None)
+        password = request.json.get("password", None)
+        result_email = db.session.execute(select(User).filter_by(email=email)).scalar_one_or_none()
+        if result_email and bcrypt.check_password_hash(result_email.password, password):
+            access_token = create_access_token(identity=email)
+            return jsonify(access_token=access_token)
+        return jsonify({"msg": "Bad username or password"}), 401
+    except Exception as e:
+        return jsonify({"msg": str(e)}), 500
+@app.route("/profile", methods= ["GET"])
+@jwt_required()
+def get_profile():
+    try:
+        current_user = get_jwt_identity()
+        return jsonify(logged_in_as=current_user), 200
+    
+    except Exception as e:
+        return jsonify({"msg": str(e)}), 500
+    
 @app.route('/user', methods=['GET'])
 def get_users():
     try:
         data = db.session.scalars(select(User)).all()
         results = list(map(lambda item: item.serialize(),data))
-
         response_body = {
             "results":results
         }
@@ -71,7 +101,7 @@ def create_user():
     user_found = db.session.execute(select(User).filter_by(email=email)).scalar_one_or_none()
     try:
         if not user_found:
-            user = User(email=email, password=request_data["password"])
+            user = User(email=email, password=bcrypt.generate_password_hash(request_data["password"])).decode('utf-8')
             db.session.add(user)
             db.session.commit()
             response_body = {
